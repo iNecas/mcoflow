@@ -4,9 +4,12 @@ require 'logger'
 
 require 'mcoflow/connectors/mcollective'
 require 'mcoflow/action'
-Dir.glob(File.expand_path('../mcoflow/actions/**/*.rb', __FILE__)) { |f| require f }
 
 module Mcoflow
+
+  def self.actions_path
+    File.expand_path('../mcoflow/actions', __FILE__)
+  end
 
   def self.initialize_mcollective(configfile)
     if MCollective::Config.instance.configured

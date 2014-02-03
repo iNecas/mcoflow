@@ -5,6 +5,8 @@ require 'pry'
 $:.unshift(File.expand_path('../lib', __FILE__))
 require 'mcoflow'
 
+Dir.glob(File.join(Mcoflow.actions_path, "**/*.rb")) { |f| require f }
+
 Mcoflow.initialize_mcollective(File.expand_path('~/.mcollective'))
 
 dynflow_config = {}
