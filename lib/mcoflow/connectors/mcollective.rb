@@ -79,7 +79,8 @@ module Mcoflow
       end
 
       def trigger_task(task)
-        client = rpcclient(task[:mco_agent].to_s)
+        client = rpcclient(task[:mco_agent].to_s,
+                           options: ::MCollective::Util.default_options)
         task[:mco_filter].each do |key, value|
           client.send(key, *Array(value))
         end
