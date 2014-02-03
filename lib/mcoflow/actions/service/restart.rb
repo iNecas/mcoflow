@@ -20,7 +20,7 @@ module Mcoflow
           { :service => input[:service] }
         end
 
-        def run
+        def initiate
           if input[:installations].any?
             restart = input[:installations].any? do |installation|
               installation[:run]

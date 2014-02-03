@@ -7,8 +7,11 @@ module Mcoflow
       REPLY_QUEUE = '/queue/mcollective.mcoflow'
 
       Task = Algebrick.type do
-        fields(action:       Dynflow::Action::Suspended,
-               request_id:   String)
+        fields(suspended_action: Dynflow::Action::Suspended,
+               mco_filter: Hash,
+               mco_agent: Object,
+               mco_action: Object,
+               mco_args: Hash)
       end
 
       Response = Algebrick.type do
@@ -16,10 +19,14 @@ module Mcoflow
                payload:      Hash)
       end
 
+      Event = Algebrick.type do
+        fields(done: Object,
+               payload: Object)
+      end
+
       def initialize(logger)
         super(logger)
-        @tasks   =  {}
-        @mcollective_mutex = Mutex.new
+        @actions           =  {}
 
         stomp_connection.subscribe(REPLY_QUEUE, { :id => 1 })
 
@@ -39,28 +46,9 @@ module Mcoflow
         end
       end
 
-      # Initiate the mcollective action
-      def mco_run(mco_filters, mco_agent, mco_action, mco_args)
-        # RPC client is not thread safe, make sure we connect with only one instance
-        # at a time
-        @mcollective_mutex.synchronize do
-          client = rpcclient(mco_agent.to_s,
-                             :options => ::MCollective::Util.default_options)
-          mco_filters.each do |key, value|
-            client.send(key, *Array(value))
-          end
-          client.reply_to = REPLY_QUEUE
-          request_id = client.send(mco_action, mco_args)
-          client.disconnect
-          request_id
-        end
-      end
-
-      # register an action for resuming: this is the time when the task
-      # is delegated to mcollective and we wait for it to finish on message bus
-      def wait_for_task(action, request_id)
-        # simulate polling for the state of the external task
-        self << Task[action, request_id]
+      def mco_run(suspended_action, mco_filter, mco_agent, mco_action, mco_args)
+        task = Task[suspended_action, mco_filter, mco_agent, mco_action, mco_args]
+        self.ask(task).value!
       end
 
       private
@@ -84,22 +72,34 @@ module Mcoflow
       def on_message(message)
         case message
         when Task
-          if @tasks.has_key?(message[:request_id])
-            raise "The task #{message[:request_id]} is already watched"
-          end
-          @tasks[message[:request_id]] = message
+          trigger_task(message)
         when Response
           resume_action(message)
         end
       end
 
-      def resume_action(response)
-        task = @tasks[response[:request_id]]
-        unless task
-          raise "we were not able to update a task #{response[:request_id]}"
+      def trigger_task(task)
+        client = rpcclient(task[:mco_agent].to_s)
+        task[:mco_filter].each do |key, value|
+          client.send(key, *Array(value))
         end
-        task[:action].update_progress(true, response[:payload])
-        @tasks.delete(response[:request_id])
+        client.reply_to = REPLY_QUEUE
+        request_id = client.send(task[:mco_action], task[:mco_args])
+        # Due to some bug (probably this one http://projects.puppetlabs.com/issues/17384),
+        # we can't really diconnect, as the further rpcclient became
+        # unusable
+        # client.disconnect
+        @actions[request_id] = task[:suspended_action]
+        request_id
+      end
+
+      def resume_action(response)
+        action = @actions[response[:request_id]]
+        unless action
+          raise "we were not able to update a action #{response[:request_id]}"
+        end
+        action << Event[true, response[:payload]]
+        @actions.delete(response[:request_id])
       end
 
     end

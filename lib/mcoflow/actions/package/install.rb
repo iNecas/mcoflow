@@ -20,7 +20,7 @@ module Mcoflow
           { :package => input[:package] }
         end
 
-        def update_progress(done, payload)
+        def update_progress(payload)
           super
           if output[:payload] &&
                 output[:payload][:body] &&

@@ -20,22 +20,27 @@ module Mcoflow
       { identity_filter: input[:hostname] }
     end
 
-    def run
-      self.output[:request_id] = Mcoflow.connector.mco_run(mco_filter,
-                                                           mco_agent,
-                                                           mco_action,
-                                                           mco_args)
-      suspend
+    def run(event = nil)
+      if event
+        update_progress(event[:payload])
+      else
+        initiate
+      end
     end
 
-    # needed by dynflow suspend mechanism
-    def setup_progress_updates(suspended_action)
-      Mcoflow.connector.wait_for_task(suspended_action, output[:request_id])
+    def initiate
+      suspend do |suspended_action|
+        output[:request_id] = Mcoflow.connector.mco_run(suspended_action,
+                                                        mco_filter,
+                                                        mco_agent,
+                                                        mco_action,
+                                                        mco_args)
+      end
     end
 
-    # invoked by PollingService
-    def update_progress(done, payload)
-      output.update payload: payload
+    def update_progress(payload)
+      output.update(payload: payload)
     end
+
   end
 end
